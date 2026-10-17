@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">活了么</string>
+    <string name="check_in_button">我还活着！(签到打卡)</string>
+    <string name="already_checked_in">今天已打卡，状况良好 👍</string>
+    <string name="streak_format">已连续存活了 %1$d 天</string>
+    <string name="not_checked_in_today">今天尚未生存打卡！</string>
+    <string name="notification_title">生命确认提醒 ⚠️</string>
+    <string name="notification_text">你还活着么？快来APP里打个卡证明一下！</string>
+    <string name="btn_test_notification">模拟未打卡通知 (立即测试)</string>
+    <string name="notification_channel_name">生存状况确认</string>
+    <string name="notification_channel_desc">当你某天未进行生存打卡时，将发送警示通知</string>
+    <string name="survival_status">生存状态</string>
+    <string name="survival_status_alive">正常存活中</string>
+    <string name="survival_status_unknown">生死未卜</string>
+    <string name="last_check_in">上次活跃时间: %1$s</string>
+    <string name="no_check_in_history">暂无生存打卡记录</string>
+    <string name="settings_title">守护设置</string>
+    <string name="notification_time_label">每日提醒时间</string>
+    <string name="permission_rationale">“活了么”需要发送通知的权限。如果某天你忘记打卡，我们需要发送通知向你确认：“你还活着么？”</string>
+    <string name="grant_permission">授予权限</string>
+</resources>

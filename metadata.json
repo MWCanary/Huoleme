@@ -1,0 +1,6 @@
+{
+  "name": "活了么",
+  "description": "每天一键打卡，关爱生命健康。如果错过打卡，系统会发出“你还活着么？”的警示通知。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
