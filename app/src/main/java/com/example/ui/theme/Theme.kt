@@ -503,7 +503,7 @@ fun MyApplicationTheme(
     themeMode: AppThemeMode = AppThemeMode.CLASSIC_BLUE,
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false, // Set to false to enjoy our custom styled brand palettes
-    customColor: Color = Color(0xFF6200EE),
+    customColor: Color = Color(0xFF00897B),
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

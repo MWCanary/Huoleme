@@ -279,7 +279,10 @@ fun saveThemeMode(context: Context, mode: AppThemeMode) {
 
 fun getSavedCustomColor(context: Context): Color {
     val prefs = context.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
-    val argb = prefs.getInt("custom_theme_color", 0xFF6200EE.toInt())
+    val argb = prefs.getInt("custom_theme_color", 0xFF00897B.toInt())
+    if (argb == 0xFF6200EE.toInt() || argb == 0xFF6750A4.toInt() || argb == 0xFF3700B3.toInt()) {
+        return Color(0xFF00897B)
+    }
     return Color(argb)
 }
 
@@ -773,7 +776,7 @@ fun MainScreen(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val savedVer = getSavedAppVersion(context)
-        val currentVer = "1.3.6 Dev Gen 2"
+        val currentVer = "1.3.6 Beta"
         if (firstLaunchDone && savedVer != currentVer) {
             showUpgradeDialog = true
         }
@@ -1217,10 +1220,10 @@ fun MainScreen(
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { showUpgradeDialog = false },
                         title = {
-                            Text("版本 1.3.6 Dev Gen 2")
+                            Text("版本 1.3.6 Beta")
                         },
                         text = {
-                            Text("已升级至 1.3.6 Dev Gen 2 版本。\n严禁降级提示：本版本已完成底层生存档案升级，禁止降级至旧版，否则会导致档案损坏。")
+                            Text("已升级至 1.3.6 Beta 版本。\n严禁降级提示：本版本已完成底层生存档案升级，禁止降级至旧版，否则会导致档案损坏。")
                         },
                         confirmButton = {
                             TextButton(onClick = { showUpgradeDialog = false }) {
@@ -1489,7 +1492,7 @@ fun OnboardingWizardOverlay(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Text(
-                                text = "本版本 (1.3.6 Dev Gen 2) 已升级底层生存档案与数据库结构，禁止降级至旧版，降级将导致生存档案损坏或应用无法运行。",
+                                text = "本版本 (1.3.6 Beta) 已升级底层生存档案与数据库结构，禁止降级至旧版，降级将导致生存档案损坏或应用无法运行。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -1615,7 +1618,7 @@ fun OnboardingWizardOverlay(
                                      "1. 本地安全：本程序定位为单机绿色生命安全提醒工具。所有打卡日志、判定轨迹皆储存在手机物理沙盒中，无任何云端服务器，保障隐私100%安全。\n" +
                                      "2. 应急提醒机制：守护功能依靠系统的 AlarmManager 定时对签到状态进行离线校验。若由于失联缺失确认，应用会触发本地高强度物理振动与自定义音画关心警讯。\n" +
                                      "3. 特殊免责事项：由于系统后台策略差异，本程序无法保证 100% 唤醒。请尽量将本应用加入电池优化白名单，或开启后台保活。\n" +
-                                     "4. 禁止降级：本版本为 1.3.6 Dev Gen 2，底层生存档案已完成升级迁移，严禁回滚降级至旧版本，降级将导致生存档案损坏或应用无法运行。"
+                                     "4. 禁止降级：本版本为 1.3.6 Beta，底层生存档案已完成升级迁移，严禁回滚降级至旧版本，降级将导致生存档案损坏或应用无法运行。"
                         Text(
                             text = serviceAgreementText,
                             style = MaterialTheme.typography.bodySmall,
@@ -3053,7 +3056,7 @@ fun SettingsPage(
                                             OutlinedTextField(
                                                 value = hexInput,
                                                 onValueChange = { hexInput = it },
-                                                placeholder = { Text("#FF4081") },
+                                                placeholder = { Text("#00897B") },
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -3146,29 +3149,20 @@ fun SettingsPage(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = if (isAnimationEnabled) Icons.Filled.PlayArrow else Icons.Filled.Close,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                        Text(
+                            text = getLocalizedText(activeLanguage, "enable_animation_setting_title"), 
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = getLocalizedText(activeLanguage, "enable_animation_setting_title"), 
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = getLocalizedText(activeLanguage, "enable_animation_setting_desc"), 
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = getLocalizedText(activeLanguage, "enable_animation_setting_desc"), 
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     Switch(
                         checked = isAnimationEnabled,
@@ -3919,6 +3913,15 @@ fun SettingsPage(
                                 )
 
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = {
+                                            showUpdateDialog = false
+                                            (context as MainActivity).openWebUrl("https://github.com/MWCanary/Huoleme/releases")
+                                        },
+                                        modifier = Modifier.fillMaxWidth().testTag("download_github_button")
+                                    ) {
+                                        Text("Github")
+                                    }
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false

@@ -35,7 +35,8 @@ class GreetingScreenshotTest {
           onRequestPermission = {},
           survivalTestament = "This is a survival testament.",
           activeLanguage = "zh",
-          birthDate = "1990-01-01"
+          birthDate = "1990-01-01",
+          isAnimationEnabled = true
         )
       } 
     }
