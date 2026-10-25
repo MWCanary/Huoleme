@@ -48,10 +48,10 @@ class LifelineForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "被划掉通知",
+                getString(R.string.task_swiped_title),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "当应用在后台被划掉时发出的通知"
+                description = getString(R.string.task_swiped_text)
                 enableLights(true)
                 enableVibration(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -72,8 +72,8 @@ class LifelineForegroundService : Service() {
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher_round)
-            .setContentTitle("不要划掉我😭！")
-            .setContentText("应用已从后台被划掉")
+            .setContentTitle(getString(R.string.task_swiped_title))
+            .setContentText(getString(R.string.task_swiped_text))
             .setContentIntent(pendingLaunchIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -103,9 +103,10 @@ class LifelineForegroundService : Service() {
     private fun createNotification(): Notification {
         val prefs = getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
         val activeLanguage = prefs.getString("app_language", "zh_CN") ?: "zh_CN"
+        val isEn = activeLanguage == "en"
 
-        val title = "活了么 守护服务"
-        val content = "活了么 服务正在运行中"
+        val title = if (isEn) "Huoleme Sentinel Service" else "「活了么」守护服务"
+        val content = if (isEn) "Huoleme service is running in background" else "应用程序守护服务正在运行中"
 
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

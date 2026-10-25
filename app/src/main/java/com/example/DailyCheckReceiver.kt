@@ -79,8 +79,8 @@ class DailyCheckReceiver : BroadcastReceiver() {
             )
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.mipmap.ic_launcher_round)
-                .setContentTitle("不要划掉我😭！")
-                .setContentText("应用已从后台被划掉")
+                .setContentTitle(context.getString(R.string.task_swiped_title))
+                .setContentText(context.getString(R.string.task_swiped_text))
                 .setContentIntent(pendingLaunchIntent)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -183,7 +183,7 @@ class DailyCheckReceiver : BroadcastReceiver() {
         )
 
         val prefs = context.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
-        val btnLabel = "快速打卡"
+        val btnLabel = context.getString(R.string.quick_check_in)
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)

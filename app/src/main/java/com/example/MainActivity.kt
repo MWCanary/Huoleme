@@ -72,6 +72,25 @@ import java.util.Locale
 import android.provider.Settings
 import android.os.PowerManager
 
+fun launchWebUrl(context: Context, url: String) {
+    try {
+        val customTabsIntent = CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .setShareState(CustomTabsIntent.SHARE_STATE_ON)
+            .build()
+        customTabsIntent.launchUrl(context, Uri.parse(url))
+    } catch (e: Exception) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (ex: Exception) {
+            Toast.makeText(context, "无法打开网页", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     private var sensorManager: android.hardware.SensorManager? = null
@@ -97,20 +116,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun openWebUrl(url: String) {
-        try {
-            val customTabsIntent = CustomTabsIntent.Builder()
-                .setShowTitle(true)
-                .setShareState(CustomTabsIntent.SHARE_STATE_ON)
-                .build()
-            customTabsIntent.launchUrl(this, Uri.parse(url))
-        } catch (e: Exception) {
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                startActivity(intent)
-            } catch (ex: Exception) {
-                Toast.makeText(this, "无法打开网页", Toast.LENGTH_SHORT).show()
-            }
-        }
+        launchWebUrl(this, url)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -776,7 +782,7 @@ fun MainScreen(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val savedVer = getSavedAppVersion(context)
-        val currentVer = "1.3.6 Beta"
+        val currentVer = "1.3.6"
         if (firstLaunchDone && savedVer != currentVer) {
             showUpgradeDialog = true
         }
@@ -1220,10 +1226,10 @@ fun MainScreen(
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { showUpgradeDialog = false },
                         title = {
-                            Text("版本 1.3.6 Beta")
+                            Text("版本 1.3.6")
                         },
                         text = {
-                            Text("已升级至 1.3.6 Beta 版本。\n严禁降级提示：本版本已完成底层生存档案升级，禁止降级至旧版，否则会导致档案损坏。")
+                            Text("已升级至 1.3.6 版本。\n严禁降级提示：本版本已完成底层生存档案升级，禁止降级至旧版，否则会导致档案损坏。")
                         },
                         confirmButton = {
                             TextButton(onClick = { showUpgradeDialog = false }) {
@@ -1492,7 +1498,7 @@ fun OnboardingWizardOverlay(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Text(
-                                text = "本版本 (1.3.6 Beta) 已升级底层生存档案与数据库结构，禁止降级至旧版，降级将导致生存档案损坏或应用无法运行。",
+                                text = "本版本 (1.3.6) 已升级底层生存档案与数据库结构，禁止降级至旧版，降级将导致生存档案损坏或应用无法运行。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -1618,7 +1624,7 @@ fun OnboardingWizardOverlay(
                                      "1. 本地安全：本程序定位为单机绿色生命安全提醒工具。所有打卡日志、判定轨迹皆储存在手机物理沙盒中，无任何云端服务器，保障隐私100%安全。\n" +
                                      "2. 应急提醒机制：守护功能依靠系统的 AlarmManager 定时对签到状态进行离线校验。若由于失联缺失确认，应用会触发本地高强度物理振动与自定义音画关心警讯。\n" +
                                      "3. 特殊免责事项：由于系统后台策略差异，本程序无法保证 100% 唤醒。请尽量将本应用加入电池优化白名单，或开启后台保活。\n" +
-                                     "4. 禁止降级：本版本为 1.3.6 Beta，底层生存档案已完成升级迁移，严禁回滚降级至旧版本，降级将导致生存档案损坏或应用无法运行。"
+                                     "4. 禁止降级：本版本为 1.3.6，底层生存档案已完成升级迁移，严禁回滚降级至旧版本，降级将导致生存档案损坏或应用无法运行。"
                         Text(
                             text = serviceAgreementText,
                             style = MaterialTheme.typography.bodySmall,
@@ -2492,7 +2498,7 @@ fun HistoryLogsPage(
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = record.date + " [安全校验通过]",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -3916,7 +3922,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://github.com/MWCanary/Huoleme/releases")
+                                            launchWebUrl(context, "https://github.com/MWCanary/Huoleme/releases")
                                         },
                                         modifier = Modifier.fillMaxWidth().testTag("download_github_button")
                                     ) {
@@ -3925,7 +3931,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://pan.huang1111.cn/s/A6NvBiB")
+                                            launchWebUrl(context, "https://pan.huang1111.cn/s/A6NvBiB")
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -3934,7 +3940,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://pan.sysri.cn/s/XA73HB")
+                                            launchWebUrl(context, "https://pan.sysri.cn/s/XA73HB")
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -3943,7 +3949,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://cncncloud.com/s/0P9Up")
+                                            launchWebUrl(context, "https://cncncloud.com/s/0P9Up")
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -3952,7 +3958,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://111pan.cn/s/a6NsJ")
+                                            launchWebUrl(context, "https://111pan.cn/s/a6NsJ")
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -3961,7 +3967,7 @@ fun SettingsPage(
                                     Button(
                                         onClick = {
                                             showUpdateDialog = false
-                                            (context as MainActivity).openWebUrl("https://pan.moe/s/0ZPvuG")
+                                            launchWebUrl(context, "https://pan.moe/s/0ZPvuG")
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -4031,7 +4037,7 @@ fun SettingsPage(
                                 OutlinedButton(
                                     onClick = {
                                         showContactAuthorDialog = false
-                                        (context as MainActivity).openWebUrl("https://t.me/mwcanary")
+                                        launchWebUrl(context, "https://t.me/mwcanary")
                                     },
                                     modifier = Modifier.fillMaxWidth().testTag("about_telegram_contact_btn"),
                                     shape = CircleShape
@@ -4041,7 +4047,7 @@ fun SettingsPage(
                                 OutlinedButton(
                                     onClick = {
                                         showContactAuthorDialog = false
-                                        (context as MainActivity).openWebUrl("https://wa.me/qr/D5YEI5LG6RG3F1")
+                                        launchWebUrl(context, "https://wa.me/qr/D5YEI5LG6RG3F1")
                                     },
                                     modifier = Modifier.fillMaxWidth().testTag("about_whatsapp_contact_btn"),
                                     shape = CircleShape
@@ -4051,7 +4057,7 @@ fun SettingsPage(
                                 OutlinedButton(
                                     onClick = {
                                         showContactAuthorDialog = false
-                                        (context as MainActivity).openWebUrl("https://teams.live.com/l/invite/FEAKgipM-NHSstOjg?v=g1")
+                                        launchWebUrl(context, "https://teams.live.com/l/invite/FEAKgipM-NHSstOjg?v=g1")
                                     },
                                     modifier = Modifier.fillMaxWidth().testTag("about_teams_contact_btn"),
                                     shape = CircleShape
@@ -4096,7 +4102,7 @@ fun SettingsPage(
                     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                     val sponsorLabel = "赞助作者"
                     OutlinedButton(
-                        onClick = { (context as MainActivity).openWebUrl("https://qr.alipay.com/fkx12551xqkxb4jowrbhq40") },
+                        onClick = { launchWebUrl(context, "https://qr.alipay.com/fkx12551xqkxb4jowrbhq40") },
                         shape = MaterialTheme.shapes.medium,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         modifier = Modifier.height(34.dp).testTag("sponsor_button"),
