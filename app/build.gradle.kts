@@ -13,8 +13,8 @@ android {
     applicationId = "com.huoleme.app"
     minSdk = 26
     targetSdk = 37
-    versionCode = 136
-    versionName = "1.3.6"
+    versionCode = 137
+    versionName = "1.3.7 Dev"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
   signingConfigs {

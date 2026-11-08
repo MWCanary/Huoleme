@@ -554,7 +554,7 @@ fun getLocalizedText(lang: String, key: String): String {
         "edit_birth_btn" -> "修改生日 "
         "privacy_protect" -> "提示：所有内容皆为本地安全沙箱加密，不提供云端同步，保障绝对的隐私安宁。"
         "app_title" -> "活了么"
-        "app_subtitle" -> "三十六计"
+        "app_subtitle" -> "三七二十一"
         "enable_animation" -> "打卡按钮动效"
         "enable_animation_setting_title" -> "动画与视觉特效"
         "enable_animation_setting_desc" -> "一键开启或关闭应用内的所有过渡动画与物理呼吸动效"
@@ -782,7 +782,7 @@ fun MainScreen(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val savedVer = getSavedAppVersion(context)
-        val currentVer = "1.3.6"
+        val currentVer = "1.3.7 Dev"
         if (firstLaunchDone && savedVer != currentVer) {
             showUpgradeDialog = true
         }
@@ -1226,10 +1226,10 @@ fun MainScreen(
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { showUpgradeDialog = false },
                         title = {
-                            Text("版本 1.3.6")
+                            Text("版本 1.3.7 Dev")
                         },
                         text = {
-                            Text("已升级至 1.3.6 版本。\n严禁降级提示：本版本已完成底层生存档案升级，禁止降级至旧版，否则会导致档案损坏。")
+                            Text("已升级至 1.3.7 Dev 版本。")
                         },
                         confirmButton = {
                             TextButton(onClick = { showUpgradeDialog = false }) {
@@ -1471,41 +1471,6 @@ fun OnboardingWizardOverlay(
                     textAlign = TextAlign.Center
                 )
 
-                // Prohibition of Downgrade Warning
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
-                    ),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "⚠️ 严禁降级提示",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = "本版本 (1.3.6) 已升级底层生存档案与数据库结构，禁止降级至旧版，降级将导致生存档案损坏或应用无法运行。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
                 // Birthday Choice
                 Text(
                     text = getLocalizedText(currentLanguage, "birth_title"),
@@ -1623,8 +1588,7 @@ fun OnboardingWizardOverlay(
                         val serviceAgreementText = "【用户服务协议与免责条款】\n" +
                                      "1. 本地安全：本程序定位为单机绿色生命安全提醒工具。所有打卡日志、判定轨迹皆储存在手机物理沙盒中，无任何云端服务器，保障隐私100%安全。\n" +
                                      "2. 应急提醒机制：守护功能依靠系统的 AlarmManager 定时对签到状态进行离线校验。若由于失联缺失确认，应用会触发本地高强度物理振动与自定义音画关心警讯。\n" +
-                                     "3. 特殊免责事项：由于系统后台策略差异，本程序无法保证 100% 唤醒。请尽量将本应用加入电池优化白名单，或开启后台保活。\n" +
-                                     "4. 禁止降级：本版本为 1.3.6，底层生存档案已完成升级迁移，严禁回滚降级至旧版本，降级将导致生存档案损坏或应用无法运行。"
+                                     "3. 特殊免责事项：由于系统后台策略差异，本程序无法保证 100% 唤醒。请尽量将本应用加入电池优化白名单，或开启后台保活。"
                         Text(
                             text = serviceAgreementText,
                             style = MaterialTheme.typography.bodySmall,
@@ -1666,7 +1630,7 @@ fun OnboardingWizardOverlay(
                         onCheckedChange = { isAgreedToTerms = it }
                     )
                     Text(
-                        text = "点击即表示你已经同意了所有内容(包括禁止降级及可能有未提及的内容)",
+                        text = "点击即表示你已经同意了所有内容(包括可能有未提及的内容)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -3911,7 +3875,35 @@ fun SettingsPage(
                             Text(getLocalizedText(activeLanguage, "has_new_version_text"))
                         },
                         text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showUpdateDialog = false
+                                            launchWebUrl(context, "https://huoleme.pages.dev")
+                                        }
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "💻 活了么 Windows 版可供下载",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "访问官网 huoleme.pages.dev",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
                                 Text(
                                     text = getLocalizedText(activeLanguage, "select_download_link"),
                                     style = MaterialTheme.typography.bodySmall,
@@ -3946,33 +3938,6 @@ fun SettingsPage(
                                     ) {
                                         Text("Cloudreve 2")
                                     }
-                                    Button(
-                                        onClick = {
-                                            showUpdateDialog = false
-                                            launchWebUrl(context, "https://cncncloud.com/s/0P9Up")
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Cloudreve 3")
-                                    }
-                                    Button(
-                                        onClick = {
-                                            showUpdateDialog = false
-                                            launchWebUrl(context, "https://111pan.cn/s/a6NsJ")
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Cloudreve 4")
-                                    }
-                                    Button(
-                                        onClick = {
-                                            showUpdateDialog = false
-                                            launchWebUrl(context, "https://pan.moe/s/0ZPvuG")
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Cloudreve 5")
-                                    }
                                 }
                             }
                         },
@@ -3981,6 +3946,41 @@ fun SettingsPage(
                                 Text(getLocalizedText(activeLanguage, "cancel_btn"))
                             }
                         }
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+
+                // Official Website Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .testTag("about_official_website_row")
+                        .clickable { launchWebUrl(context, "https://huoleme.pages.dev") }
+                        .padding(vertical = 14.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Home,
+                            contentDescription = "Official website icon",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "访问官网",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Open website",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
