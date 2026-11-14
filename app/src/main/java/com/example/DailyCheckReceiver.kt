@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.example.data.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -22,13 +23,14 @@ class DailyCheckReceiver : BroadcastReceiver() {
         val action = intent.action
         if (action == "com.example.ACTION_QUICK_CHECK_IN") {
             val pendingResult = goAsync()
-            val scope = CoroutineScope(Dispatchers.IO)
+            val appContext = context.applicationContext
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             scope.launch {
                 try {
-                    val db = AppDatabase.getDatabase(context)
+                    val db = AppDatabase.getDatabase(appContext)
                     val dao = db.checkInDao()
                     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                    val quickLocation = LocationHelper.getLocationString(context)
+                    val quickLocation = LocationHelper.getLocationString(appContext, allowActiveRefresh = false)
 
                     val record = com.example.data.CheckInRecord(
                         date = today,
@@ -36,14 +38,14 @@ class DailyCheckReceiver : BroadcastReceiver() {
                         location = quickLocation
                     )
                     dao.insertRecord(record)
-                    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                    notificationManager.cancel(1001)
+                    val notificationManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    notificationManager?.cancel(1001)
                     
-                    VibrationHelper.stopVibration(context)
+                    VibrationHelper.stopVibration(appContext)
 
                     launch(Dispatchers.Main) {
                         val toastMsg = "快速打卡成功！生存记录已更新。"
-                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(appContext, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -55,7 +57,7 @@ class DailyCheckReceiver : BroadcastReceiver() {
         }
 
         if (action == "com.example.ACTION_APP_KILLED") {
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             val channelId = "killed_notification_channel_vibrate"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
@@ -93,15 +95,16 @@ class DailyCheckReceiver : BroadcastReceiver() {
         }
         
         val pendingResult = goAsync()
-        val scope = CoroutineScope(Dispatchers.IO)
+        val appContext = context.applicationContext
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         
         scope.launch {
             try {
-                val db = AppDatabase.getDatabase(context)
+                val db = AppDatabase.getDatabase(appContext)
                 val dao = db.checkInDao()
                 
-                val prefs = context.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
-                val targetHour = prefs.getInt("notification_hour", 20)
+                val prefs = appContext.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
+                val targetHour = prefs.getInt("notification_hour", 22)
                 val targetMinute = prefs.getInt("notification_minute", 0)
                 
                 val now = java.util.Calendar.getInstance()
@@ -123,7 +126,7 @@ class DailyCheckReceiver : BroadcastReceiver() {
                 
                 if (checkInRecord == null) {
                     // Send notification if they missed checking in
-                    sendSurvivalNotification(context)
+                    sendSurvivalNotification(appContext)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

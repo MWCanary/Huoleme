@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.CheckInRecord
 import com.example.data.CheckInRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -32,6 +34,15 @@ class MainViewModel(
     private val repository: CheckInRepository
 ) : AndroidViewModel(application) {
 
+    private val currentDateFlow = MutableStateFlow(getTodayString())
+
+    fun refreshCurrentDate() {
+        val today = getTodayString()
+        if (currentDateFlow.value != today) {
+            currentDateFlow.value = today
+        }
+    }
+
     // All database records
     val allRecords: StateFlow<List<CheckInRecord>> = repository.allRecords
         .stateIn(
@@ -41,8 +52,7 @@ class MainViewModel(
         )
 
     // Whether the user has checked in today
-    val isCheckedInToday: StateFlow<Boolean> = allRecords.map { records ->
-        val todayStr = getTodayString()
+    val isCheckedInToday: StateFlow<Boolean> = combine(allRecords, currentDateFlow) { records, todayStr ->
         records.any { it.date == todayStr }
     }.stateIn(
         scope = viewModelScope,
@@ -51,7 +61,7 @@ class MainViewModel(
     )
 
     // Current continuous streak in days
-    val currentStreak: StateFlow<Int> = allRecords.map { records ->
+    val currentStreak: StateFlow<Int> = combine(allRecords, currentDateFlow) { records, _ ->
         calculateStreak(records)
     }.stateIn(
         scope = viewModelScope,
@@ -215,6 +225,10 @@ class MainViewModel(
                 lower.contains("license")
     }
 
+    suspend fun exportAllDataToJsonAsync(prefs: android.content.SharedPreferences): String = withContext(Dispatchers.Default) {
+        exportAllDataToJson(prefs)
+    }
+
     // Export all data to JSON (excluding any authoritative or privilege state)
     fun exportAllDataToJson(prefs: android.content.SharedPreferences): String {
         val rootObject = org.json.JSONObject()
@@ -247,68 +261,71 @@ class MainViewModel(
     // Import records from JSON (silently discarding any authoritative state fields)
     fun importRecordsFromJson(jsonString: String, prefs: android.content.SharedPreferences, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            try {
-                val jsonStrTrimmed = jsonString.trim()
-                var recordsArray: org.json.JSONArray? = null
-                var newRecordsCount = 0
-                var prefsImported = false
-                
-                if (jsonStrTrimmed.startsWith("{")) {
-                    val rootObj = org.json.JSONObject(jsonStrTrimmed)
-                    if (rootObj.has("records")) {
-                        recordsArray = rootObj.optJSONArray("records")
-                    }
-                    if (rootObj.has("preferences")) {
-                        val prefsObj = rootObj.getJSONObject("preferences")
-                        val editor = prefs.edit()
-                        val keys = prefsObj.keys()
-                        while (keys.hasNext()) {
-                            val key = keys.next()
-                            // Silently discard all authoritative / privilege / login / ad-free fields
-                            if (isAuthoritativeStateKey(key)) {
-                                continue
+            val (success, msg) = withContext(Dispatchers.IO) {
+                try {
+                    val jsonStrTrimmed = jsonString.trim()
+                    var recordsArray: org.json.JSONArray? = null
+                    var newRecordsCount = 0
+                    var prefsImported = false
+                    
+                    if (jsonStrTrimmed.startsWith("{")) {
+                        val rootObj = org.json.JSONObject(jsonStrTrimmed)
+                        if (rootObj.has("records")) {
+                            recordsArray = rootObj.optJSONArray("records")
+                        }
+                        if (rootObj.has("preferences")) {
+                            val prefsObj = rootObj.getJSONObject("preferences")
+                            val editor = prefs.edit()
+                            val keys = prefsObj.keys()
+                            while (keys.hasNext()) {
+                                val key = keys.next()
+                                // Silently discard all authoritative / privilege / login / ad-free fields
+                                if (isAuthoritativeStateKey(key)) {
+                                    continue
+                                }
+                                val value = prefsObj.get(key)
+                                when (value) {
+                                    is String -> editor.putString(key, value)
+                                    is Int -> editor.putInt(key, value)
+                                    is Boolean -> editor.putBoolean(key, value)
+                                    is Float -> editor.putFloat(key, value)
+                                    is Long -> editor.putLong(key, value)
+                                }
                             }
-                            val value = prefsObj.get(key)
-                            when (value) {
-                                is String -> editor.putString(key, value)
-                                is Int -> editor.putInt(key, value)
-                                is Boolean -> editor.putBoolean(key, value)
-                                is Float -> editor.putFloat(key, value)
-                                is Long -> editor.putLong(key, value)
+                            editor.apply()
+                            prefsImported = true
+                        }
+                    } else if (jsonStrTrimmed.startsWith("[")) {
+                        recordsArray = org.json.JSONArray(jsonStrTrimmed)
+                    } else {
+                        return@withContext false to "无效的文件格式 (Invalid File Format)"
+                    }
+                    
+                    if (recordsArray != null) {
+                        for (i in 0 until recordsArray.length()) {
+                            val jsonObject = recordsArray.getJSONObject(i)
+                            val date = jsonObject.optString("date", "")
+                            val timestamp = jsonObject.optLong("timestamp", 0L)
+                            val note = jsonObject.optString("note", "")
+                            val location = jsonObject.optString("location", "无位置")
+                            if (date.isNotEmpty() && timestamp > 0L) {
+                                val existing = repository.getRecordByDate(date)
+                                if (existing == null) {
+                                    val record = com.example.data.CheckInRecord(date = date, timestamp = timestamp, note = note, location = location)
+                                    repository.insertRecord(record)
+                                    newRecordsCount++
+                                }
                             }
                         }
-                        editor.apply()
-                        prefsImported = true
                     }
-                } else if (jsonStrTrimmed.startsWith("[")) {
-                    recordsArray = org.json.JSONArray(jsonStrTrimmed)
-                } else {
-                    onResult(false, "无效的文件格式 (Invalid File Format)")
-                    return@launch
+                    val resultMsg = "导入成功 (Import Success): 导入了 $newRecordsCount 条新记录。" + if (prefsImported) " 并恢复了设置。" else ""
+                    true to resultMsg
+                } catch (e: Exception) {
+                    false to "导入失败 (Import Failed): ${e.message}"
                 }
-                
-                if (recordsArray != null) {
-                    for (i in 0 until recordsArray.length()) {
-                        val jsonObject = recordsArray.getJSONObject(i)
-                        val date = jsonObject.optString("date", "")
-                        val timestamp = jsonObject.optLong("timestamp", 0L)
-                        val note = jsonObject.optString("note", "")
-                        val location = jsonObject.optString("location", "无位置")
-                        if (date.isNotEmpty() && timestamp > 0L) {
-                            val existing = repository.getRecordByDate(date)
-                            if (existing == null) {
-                                val record = com.example.data.CheckInRecord(date = date, timestamp = timestamp, note = note, location = location)
-                                repository.insertRecord(record)
-                                newRecordsCount++
-                            }
-                        }
-                    }
-                }
-                val msg = "导入成功 (Import Success): 导入了 $newRecordsCount 条新记录。" + if (prefsImported) " 并恢复了设置。" else ""
-                onResult(true, msg)
-            } catch (e: Exception) {
-                onResult(false, "导入失败 (Import Failed): ${e.message}")
             }
+            refreshCurrentDate()
+            onResult(success, msg)
         }
     }
     // Calculate current running streak

@@ -54,13 +54,18 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.browser.customtabs.CustomTabsIntent
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.example.data.AppDatabase
 import com.example.data.CheckInRecord
 import com.example.data.CheckInRepository
@@ -96,8 +101,34 @@ class MainActivity : ComponentActivity() {
     private var sensorManager: android.hardware.SensorManager? = null
     private var accelerometer: android.hardware.Sensor? = null
     private var shakeListener: android.hardware.SensorEventListener? = null
+    private var shakeTimeoutJob: Job? = null
     private var canTriggerAd = true
     var onRemoteCheckInCallback: (() -> Unit)? = null
+
+    private fun unregisterShakeListener() {
+        shakeTimeoutJob?.cancel()
+        shakeTimeoutJob = null
+        shakeListener?.let { listener ->
+            try {
+                sensorManager?.unregisterListener(listener)
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        canTriggerAd = false
+        unregisterShakeListener()
+    }
+
+    override fun onDestroy() {
+        unregisterShakeListener()
+        shakeListener = null
+        accelerometer = null
+        sensorManager = null
+        onRemoteCheckInCallback = null
+        super.onDestroy()
+    }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
@@ -122,7 +153,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
         accelerometer = sensorManager?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
         
         shakeListener = object : android.hardware.SensorEventListener {
@@ -157,7 +188,7 @@ class MainActivity : ComponentActivity() {
                     // Trigger on slight movement (1.8 m/s^2 difference in any axis)
                     if (deltaX > 1.8f || deltaY > 1.8f || deltaZ > 1.8f) { 
                         canTriggerAd = false
-                        sensorManager?.unregisterListener(this)
+                        unregisterShakeListener()
                         try {
                             val urls = listOf(
                                 "https://qr.alipay.com/fkx12551xqkxb4jowrbhq40",
@@ -175,13 +206,13 @@ class MainActivity : ComponentActivity() {
             override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
         }
         
-        if (!getIsAdFree(this)) {
+        if (!getIsAdFree(this) && accelerometer != null) {
             sensorManager?.registerListener(shakeListener, accelerometer, android.hardware.SensorManager.SENSOR_DELAY_UI)
             
-            lifecycleScope.launch {
+            shakeTimeoutJob = lifecycleScope.launch {
                 delay(10000)
                 canTriggerAd = false
-                shakeListener?.let { sensorManager?.unregisterListener(it) }
+                unregisterShakeListener()
             }
         }
 
@@ -703,61 +734,6 @@ fun MainScreen(
     // System info notifications
     var infoBarNotification by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-    // Helper functions for Location
-    fun checkLocationPermission(ctx: Context): Boolean {
-        val fine = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        return fine || coarse
-    }
-
-    fun getCurrentLocationString(ctx: Context): String {
-        if (!checkLocationPermission(ctx)) {
-            return "无位置"
-        }
-        return try {
-            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
-                ?: return "无位置"
-            
-            var bestLoc: android.location.Location? = null
-            val providers = listOf(
-                android.location.LocationManager.GPS_PROVIDER,
-                android.location.LocationManager.NETWORK_PROVIDER,
-                android.location.LocationManager.PASSIVE_PROVIDER
-            )
-            for (p in providers) {
-                try {
-                    if (lm.isProviderEnabled(p)) {
-                        val loc = lm.getLastKnownLocation(p)
-                        if (loc != null) {
-                            if (bestLoc == null || loc.time > bestLoc.time || (loc.accuracy > 0 && loc.accuracy < bestLoc.accuracy)) {
-                                bestLoc = loc
-                            }
-                        }
-                    }
-                } catch (e: Exception) {}
-            }
-            if (bestLoc == null) {
-                for (p in lm.allProviders) {
-                    try {
-                        val loc = lm.getLastKnownLocation(p)
-                        if (loc != null && (bestLoc == null || loc.time > bestLoc.time)) {
-                            bestLoc = loc
-                        }
-                    } catch (e: Exception) {}
-                }
-            }
-            if (bestLoc != null) {
-                val lat = String.format(Locale.US, "%.4f", bestLoc.latitude)
-                val lon = String.format(Locale.US, "%.4f", bestLoc.longitude)
-                "经度: $lon, 纬度: $lat"
-            } else {
-                "无位置"
-            }
-        } catch (e: Exception) {
-            "无位置"
-        }
-    }
-
     DisposableEffect(Unit) {
         val activity = context as? MainActivity
         activity?.onRemoteCheckInCallback = {
@@ -782,7 +758,7 @@ fun MainScreen(
     var showUpgradeDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val savedVer = getSavedAppVersion(context)
-        val currentVer = "1.3.7 Dev"
+        val currentVer = "1.3.7 Dev Gen 2"
         if (firstLaunchDone && savedVer != currentVer) {
             showUpgradeDialog = true
         }
@@ -813,10 +789,11 @@ fun MainScreen(
             scope.launch {
                 try {
                     val prefsToExport = context.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
-                    val jsonStr = model.exportAllDataToJson(prefsToExport)
- 
-                    context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(jsonStr.toByteArray())
+                    val jsonStr = model.exportAllDataToJsonAsync(prefsToExport)
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(jsonStr.toByteArray())
+                        }
                     }
                     Toast.makeText(context, "导出成功 (Export Success)", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -831,13 +808,29 @@ fun MainScreen(
         if (uri != null) {
             scope.launch {
                 try {
-                    val jsonStr = context.contentResolver.openInputStream(uri)?.use { input ->
-                        input.bufferedReader().readText()
+                    val jsonStr = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            input.bufferedReader().readText()
+                        }
                     }
                     if (jsonStr != null) {
                         val prefsToImport = context.getSharedPreferences("huolileme_settings", Context.MODE_PRIVATE)
                         model.importRecordsFromJson(jsonStr, prefsToImport) { success, msg ->
- 
+                            if (success) {
+                                userBirthDate = getBirthDate(context)
+                                survivalTestament = getSavedTestament(context)
+                                isAnimationEnabledState = getIsAnimationEnabled(context)
+                                onThemeChange(getSavedThemeMode(context))
+                                onCustomColorChange(getSavedCustomColor(context))
+                                onDarkModeChange(getSavedDarkMode(context))
+                                onLanguageChange(getSavedLanguage(context))
+                                onFontSizeLevelChange(getFontSizeLevel(context))
+                                AlarmScheduler.scheduleDailyCheck(
+                                    context,
+                                    getNotificationHour(context),
+                                    getNotificationMinute(context)
+                                )
+                            }
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -869,13 +862,14 @@ fun MainScreen(
         }
     }
 
-    // Lifecycle observer to recheck permissions on Resume
+    // Lifecycle observer to recheck permissions and midnight rollover on Resume
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 hasNotificationPermissionState = checkNotificationPermission(context)
                 isIgnoringBatteryOptimizationsState = checkBatteryOptimizationExemption(context)
+                model.refreshCurrentDate()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1226,10 +1220,10 @@ fun MainScreen(
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { showUpgradeDialog = false },
                         title = {
-                            Text("版本 1.3.7 Dev")
+                            Text("版本 1.3.7 Dev Gen 2")
                         },
                         text = {
-                            Text("已升级至 1.3.7 Dev 版本。")
+                            Text("已升级至 1.3.7 Dev Gen 2 版本。")
                         },
                         confirmButton = {
                             TextButton(onClick = { showUpgradeDialog = false }) {
@@ -1710,10 +1704,13 @@ fun DashboardPage(
     }
     
     
-    // Realtime Survival Countdown timer
+    // Realtime Survival Countdown timer (only runs while UI is in STARTED/foreground state)
     var timeRemainingStr by remember { mutableStateOf("00:00:00") }
-    LaunchedEffect(isCheckedInToday, notificationHour, notificationMinute) {
-        while (true) {
+    LaunchedEffect(lifecycleOwner, isCheckedInToday, notificationHour, notificationMinute, activeLanguage) {
+        val hStr = getLocalizedText(activeLanguage, "hours")
+        val mStr = getLocalizedText(activeLanguage, "minutes")
+        val sStr = getLocalizedText(activeLanguage, "seconds")
+        fun computeTargetMillis(): Long {
             val now = java.util.Calendar.getInstance()
             val target = java.util.Calendar.getInstance().apply {
                 set(java.util.Calendar.HOUR_OF_DAY, notificationHour)
@@ -1724,32 +1721,43 @@ fun DashboardPage(
             if (isCheckedInToday || now.after(target)) {
                 target.add(java.util.Calendar.DAY_OF_YEAR, 1)
             }
-            val diffMs = target.timeInMillis - now.timeInMillis
-            if (diffMs <= 0) {
-                timeRemainingStr = "00:00:00"
-            } else {
-                val hours = diffMs / 3600000
-                val minutes = (diffMs % 3600000) / 60000
-                val seconds = (diffMs % 60000) / 1000
-                val hStr = getLocalizedText(activeLanguage, "hours")
-                val mStr = getLocalizedText(activeLanguage, "minutes")
-                val sStr = getLocalizedText(activeLanguage, "seconds")
-                timeRemainingStr = String.format("%02d %s %02d %s %02d %s", hours, hStr, minutes, mStr, seconds, sStr)
+            return target.timeInMillis
+        }
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var targetMillis = computeTargetMillis()
+            while (true) {
+                val nowMillis = System.currentTimeMillis()
+                if (nowMillis >= targetMillis) {
+                    targetMillis = computeTargetMillis()
+                }
+                val diffMs = targetMillis - nowMillis
+                if (diffMs <= 0) {
+                    timeRemainingStr = "00:00:00"
+                } else {
+                    val hours = diffMs / 3600000
+                    val minutes = (diffMs % 3600000) / 60000
+                    val seconds = (diffMs % 60000) / 1000
+                    timeRemainingStr = String.format("%02d %s %02d %s %02d %s", hours, hStr, minutes, mStr, seconds, sStr)
+                }
+                kotlinx.coroutines.delay(1000L)
             }
-            kotlinx.coroutines.delay(1000L)
         }
     }
 
-    val pulseTransition = rememberInfiniteTransition(label = "PulseTransition")
-    val pulseScale by pulseTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isCheckedInToday || !isAnimationEnabled) 1f else 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1250, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "PulseScale"
-    )
+    val pulseScale = if (!isCheckedInToday && isAnimationEnabled) {
+        val pulseTransition = rememberInfiniteTransition(label = "PulseTransition")
+        pulseTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.05f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1250, easing = EaseInOutSine),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "PulseScale"
+        ).value
+    } else {
+        1f
+    }
 
     Column(
         modifier = Modifier
@@ -2527,12 +2535,13 @@ fun SettingsPage(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var saveJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var hourSaveJob by remember { mutableStateOf<Job?>(null) }
+    var minuteSaveJob by remember { mutableStateOf<Job?>(null) }
 
     var notificationHour by remember { mutableStateOf(getNotificationHour(context)) }
     var notificationMinute by remember { mutableStateOf(getNotificationMinute(context)) }
-    var notificationHourText by remember(notificationHour) { mutableStateOf(notificationHour.toString()) }
-    var notificationMinuteText by remember(notificationMinute) { mutableStateOf(notificationMinute.toString()) }
+    var notificationHourText by remember { mutableStateOf(notificationHour.toString()) }
+    var notificationMinuteText by remember { mutableStateOf(notificationMinute.toString()) }
     var isForegroundEnabled by remember { mutableStateOf(getForegroundServiceEnabled(context)) }
 
     var showUndoWarningDialog by remember { mutableStateOf(false) }
@@ -3298,13 +3307,14 @@ fun SettingsPage(
                     
                     Button(
                         onClick = {
-                            val y = editYear.toInt()
-                            val m = editMonth.toInt()
-                            val d = editDay.toInt()
-                            val formattedDate = "$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
-                            onBirthDateChanged(formattedDate)
-                            val toastMsg = "更新成功！"
-                            Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+                            val y = editYear.toIntOrNull()
+                            val m = editMonth.toIntOrNull()
+                            val d = editDay.toIntOrNull()
+                            if (y != null && m != null && d != null) {
+                                val formattedDate = "$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
+                                onBirthDateChanged(formattedDate)
+                                Toast.makeText(context, "更新成功！", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium
@@ -3511,16 +3521,16 @@ fun SettingsPage(
                             val cleanValue = newValue.filter { it.isDigit() }
                             if (cleanValue.length <= 2) {
                                 notificationHourText = cleanValue
-                                saveJob?.cancel()
-                                saveJob = scope.launch {
-                                    kotlinx.coroutines.delay(1000)
-                                    val parsed = cleanValue.toIntOrNull()
-                                    if (parsed != null && parsed in 0..23) {
-                                        notificationHour = parsed
-                                        saveNotificationTime(context, parsed, notificationMinute)
-                                        AlarmScheduler.scheduleDailyCheck(context, parsed, notificationMinute)
-                                    } else {
-                                        notificationHourText = notificationHour.toString() // revert if invalid
+                                hourSaveJob?.cancel()
+                                val parsed = cleanValue.toIntOrNull()
+                                if (parsed != null && parsed in 0..23) {
+                                    notificationHour = parsed
+                                    saveNotificationTime(context, parsed, notificationMinute)
+                                    AlarmScheduler.scheduleDailyCheck(context, parsed, notificationMinute)
+                                } else {
+                                    hourSaveJob = scope.launch {
+                                        delay(1200)
+                                        notificationHourText = notificationHour.toString()
                                     }
                                 }
                             }
@@ -3543,15 +3553,15 @@ fun SettingsPage(
                             val cleanValue = newValue.filter { it.isDigit() }
                             if (cleanValue.length <= 2) {
                                 notificationMinuteText = cleanValue
-                                saveJob?.cancel()
-                                saveJob = scope.launch {
-                                    kotlinx.coroutines.delay(1000)
-                                    val parsed = cleanValue.toIntOrNull()
-                                    if (parsed != null && parsed in 0..59) {
-                                        notificationMinute = parsed
-                                        saveNotificationTime(context, notificationHour, parsed)
-                                        AlarmScheduler.scheduleDailyCheck(context, notificationHour, parsed)
-                                    } else {
+                                minuteSaveJob?.cancel()
+                                val parsed = cleanValue.toIntOrNull()
+                                if (parsed != null && parsed in 0..59) {
+                                    notificationMinute = parsed
+                                    saveNotificationTime(context, notificationHour, parsed)
+                                    AlarmScheduler.scheduleDailyCheck(context, notificationHour, parsed)
+                                } else {
+                                    minuteSaveJob = scope.launch {
+                                        delay(1200)
                                         notificationMinuteText = notificationMinute.toString()
                                     }
                                 }
@@ -3637,6 +3647,11 @@ fun SettingsPage(
                 )
 
                 var textValue by remember { mutableStateOf(survivalTestament) }
+                LaunchedEffect(survivalTestament) {
+                    if (textValue != survivalTestament) {
+                        textValue = survivalTestament
+                    }
+                }
                 OutlinedTextField(
                     value = textValue,
                     onValueChange = {

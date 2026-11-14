@@ -19,6 +19,7 @@ class LifelineForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isRunning = true
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
                 FOREGROUND_NOTIFICATION_ID,
@@ -29,6 +30,11 @@ class LifelineForegroundService : Service() {
             startForeground(FOREGROUND_NOTIFICATION_ID, createNotification())
         }
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        isRunning = false
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -43,7 +49,7 @@ class LifelineForegroundService : Service() {
     }
 
     private fun sendKilledNotification() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         val channelId = "killed_notification_channel_vibrate"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -95,8 +101,8 @@ class LifelineForegroundService : Service() {
                 description = "Keeps the Lifeline app running in the background"
                 setShowBadge(false)
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.createNotificationChannel(channel)
         }
     }
 
@@ -118,16 +124,6 @@ class LifelineForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        val checkInIntent = Intent(this, DailyCheckReceiver::class.java).apply {
-            action = "com.example.ACTION_QUICK_CHECK_IN"
-        }
-        val checkInPendingIntent = PendingIntent.getBroadcast(
-            this,
-            12346,
-            checkInIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle(title)
@@ -143,19 +139,34 @@ class LifelineForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "lifeline_foreground_channel"
         private const val FOREGROUND_NOTIFICATION_ID = 2001
+
+        @Volatile
+        private var isRunning: Boolean = false
         
         fun start(context: Context) {
-            val intent = Intent(context, LifelineForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            if (isRunning) return
+            val appContext = context.applicationContext
+            val intent = Intent(appContext, LifelineForegroundService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    appContext.startForegroundService(intent)
+                } else {
+                    appContext.startService(intent)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         
         fun stop(context: Context) {
-            val intent = Intent(context, LifelineForegroundService::class.java)
-            context.stopService(intent)
+            isRunning = false
+            val appContext = context.applicationContext
+            val intent = Intent(appContext, LifelineForegroundService::class.java)
+            try {
+                appContext.stopService(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }

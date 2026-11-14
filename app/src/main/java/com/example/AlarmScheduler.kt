@@ -21,12 +21,14 @@ object AlarmScheduler {
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
             if (before(Calendar.getInstance())) {
                 add(Calendar.DATE, 1) // Set for tomorrow if the hour has already passed today
             }
         }
 
         try {
+            alarmManager.cancel(pendingIntent)
             alarmManager.setInexactRepeating(
                 AlarmManager.RTC_WAKEUP,
                 calendar.timeInMillis,

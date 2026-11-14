@@ -11,21 +11,55 @@ import android.os.VibrationEffect
 import kotlinx.coroutines.*
 
 object VibrationHelper {
+    private val toneLock = Any()
     private var toneGenerator: ToneGenerator? = null
     private var sosJob: Job? = null
     private var alertJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private fun acquireToneGenerator(): ToneGenerator? {
+        synchronized(toneLock) {
+            if (toneGenerator == null) {
+                toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+            }
+            return toneGenerator
+        }
+    }
+
+    private fun releaseToneGenerator() {
+        synchronized(toneLock) {
+            try {
+                toneGenerator?.release()
+            } catch (_: Exception) {
+            } finally {
+                toneGenerator = null
+            }
+        }
+    }
+
+    private fun startToneSafe(toneType: Int, durationMs: Int) {
+        synchronized(toneLock) {
+            try {
+                toneGenerator?.startTone(toneType, durationMs)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun getVibrator(context: Context): Vibrator? {
+        val appContext = context.applicationContext
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
 
     fun triggerVibration(context: Context, isAlert: Boolean = false) {
+        val appContext = context.applicationContext
         try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-
+            val vibrator = getVibrator(appContext)
             if (vibrator != null && vibrator.hasVibrator()) {
                 val audioAttributes = AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -34,23 +68,20 @@ object VibrationHelper {
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     if (isAlert) {
-                        // 20 times intermittent strong vibration
                         val timings = LongArray(41) { index ->
                             if (index == 0) 0L
-                            else if (index % 2 == 1) 400L // 400ms vibration
-                            else 200L // 200ms pause
+                            else if (index % 2 == 1) 400L
+                            else 200L
                         }
                         val amplitudes = IntArray(41) { index ->
                             if (index == 0) 0
-                            else if (index % 2 == 1) 255 // max amplitude
+                            else if (index % 2 == 1) 255
                             else 0
                         }
                         @Suppress("DEPRECATION")
                         vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1), audioAttributes)
-                        
-                        playAlertSound(context)
+                        playAlertSound(appContext)
                     } else {
-                        // Clean, crisp tactile click
                         val timings = longArrayOf(0, 80, 80, 80)
                         val amplitudes = intArrayOf(0, 180, 0, 240)
                         @Suppress("DEPRECATION")
@@ -65,8 +96,7 @@ object VibrationHelper {
                             else 200L
                         }
                         vibrator.vibrate(timings, -1)
-                        
-                        playAlertSound(context)
+                        playAlertSound(appContext)
                     } else {
                         vibrator.vibrate(longArrayOf(0, 80, 80, 80), -1)
                     }
@@ -78,53 +108,53 @@ object VibrationHelper {
     }
 
     private fun playAlertSound(context: Context) {
+        val appContext = context.applicationContext
         alertJob?.cancel()
         alertJob = scope.launch {
             try {
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
-                
-                if (toneGenerator == null) {
-                    toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                }
+                try {
+                    val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    audioManager?.setStreamVolume(
+                        AudioManager.STREAM_ALARM,
+                        audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                        0
+                    )
+                } catch (_: SecurityException) {
+                } catch (_: Exception) {}
+
+                acquireToneGenerator()
                 for (i in 0 until 20) {
                     if (!isActive) break
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-                    delay(600) // 400ms tone + 200ms pause
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+                    delay(600)
                 }
-                toneGenerator?.release()
-                toneGenerator = null
+            } catch (_: CancellationException) {
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                releaseToneGenerator()
             }
         }
     }
 
     fun triggerMorseSOSVibration(context: Context, repeat: Boolean = false) {
+        val appContext = context.applicationContext
         try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-
+            val vibrator = getVibrator(appContext)
             if (vibrator != null && vibrator.hasVibrator()) {
                 val audioAttributes = AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .build()
 
-                // Morse SOS timings: S (...), O (---), S (...)
                 val timings = longArrayOf(
-                    0, 
-                    150, 150, 150, 150, 150, 300,  // S (...): 150ms on, 150ms off, 150ms on... 300ms gap
-                    450, 150, 450, 150, 450, 300,  // O (---): 450ms on, 150ms off, 450ms on... 300ms gap
-                    150, 150, 150, 150, 150, 1000  // S (...): 150ms on, 150ms off... 1000ms loop gap
+                    0,
+                    150, 150, 150, 150, 150, 300,
+                    450, 150, 450, 150, 450, 300,
+                    150, 150, 150, 150, 150, 1000
                 )
                 val amplitudes = intArrayOf(
-                    0, 
+                    0,
                     255, 0, 255, 0, 255, 0,
                     255, 0, 255, 0, 255, 0,
                     255, 0, 255, 0, 255, 0
@@ -138,53 +168,60 @@ object VibrationHelper {
                     @Suppress("DEPRECATION")
                     vibrator.vibrate(timings, if (repeat) 0 else -1)
                 }
-                
-                playMorseSOSSound(context, repeat)
+
+                playMorseSOSSound(appContext, repeat)
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
-    
+
     private fun playMorseSOSSound(context: Context, repeat: Boolean) {
+        val appContext = context.applicationContext
         sosJob?.cancel()
         sosJob = scope.launch {
             try {
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
-                
-                if (toneGenerator == null) {
-                    toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                }
-                
+                try {
+                    val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    audioManager?.setStreamVolume(
+                        AudioManager.STREAM_ALARM,
+                        audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                        0
+                    )
+                } catch (_: SecurityException) {
+                } catch (_: Exception) {}
+
+                acquireToneGenerator()
+
                 do {
-                    // S (...)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(450) // 150 + 300 gap
-                    
                     if (!isActive) break
-                    
-                    // O (---)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(600)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(600)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(750) // 450 + 300 gap
-                    
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
                     if (!isActive) break
-                    
-                    // S (...)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(1150) // 150 + 1000 loop gap
-                    
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
+                    if (!isActive) break
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(450)
+
+                    if (!isActive) break
+
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(600)
+                    if (!isActive) break
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(600)
+                    if (!isActive) break
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450); delay(750)
+
+                    if (!isActive) break
+
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
+                    if (!isActive) break
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(300)
+                    if (!isActive) break
+                    startToneSafe(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150); delay(1150)
                 } while (repeat && isActive)
-                
-                if (!repeat) {
-                    toneGenerator?.release()
-                    toneGenerator = null
-                }
+            } catch (_: CancellationException) {
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                releaseToneGenerator()
             }
         }
     }
@@ -192,18 +229,11 @@ object VibrationHelper {
     fun stopVibration(context: Context) {
         try {
             sosJob?.cancel()
+            sosJob = null
             alertJob?.cancel()
-            toneGenerator?.release()
-            toneGenerator = null
-            
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            vibrator?.cancel()
+            alertJob = null
+            releaseToneGenerator()
+            getVibrator(context)?.cancel()
         } catch (e: Exception) {
             e.printStackTrace()
         }
