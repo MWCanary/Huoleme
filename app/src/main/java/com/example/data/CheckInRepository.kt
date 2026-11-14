@@ -11,6 +11,9 @@ class CheckInRepository(private val checkInDao: CheckInDao) {
 
     suspend fun insertRecord(record: CheckInRecord) = checkInDao.insertRecord(record)
 
+    suspend fun updateLocationIfMissing(date: String, location: String) =
+        checkInDao.updateLocationIfMissing(date, location)
+
     suspend fun deleteRecordByDate(date: String) = checkInDao.deleteRecordByDate(date)
 
     suspend fun clearAll() = checkInDao.deleteAll()

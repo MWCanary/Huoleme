@@ -85,16 +85,37 @@ class MainViewModel(
         initialValue = ""
     )
 
-    // Perform check-in for today with optional location
+    // Perform check-in for today with optional location, and backfill asynchronously if missing
     fun checkInToday(location: String = "无位置") {
         viewModelScope.launch {
+            val appContext = application.applicationContext
+            val initialLoc = if (location.isNotBlank() && location != "无位置") {
+                location
+            } else {
+                LocationHelper.getLocationString(appContext, allowActiveRefresh = false)
+            }
             val todayStr = getTodayString()
             val record = CheckInRecord(
                 date = todayStr,
                 timestamp = System.currentTimeMillis(),
-                location = location
+                location = initialLoc
             )
             repository.insertRecord(record)
+
+            if ((initialLoc.isBlank() || initialLoc == "无位置") &&
+                LocationHelper.checkLocationPermission(appContext)
+            ) {
+                LocationHelper.resolveLocationAsync(appContext) { freshLoc ->
+                    backfillTodayLocationIfMissing(freshLoc, todayStr)
+                }
+            }
+        }
+    }
+
+    fun backfillTodayLocationIfMissing(location: String, targetDate: String = getTodayString()) {
+        if (location.isBlank() || location == "无位置") return
+        viewModelScope.launch {
+            repository.updateLocationIfMissing(targetDate, location)
         }
     }
 

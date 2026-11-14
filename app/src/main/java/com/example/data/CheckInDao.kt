@@ -20,6 +20,9 @@ interface CheckInDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: CheckInRecord)
 
+    @Query("UPDATE check_in_records SET location = :location WHERE date = :date AND (location = '' OR location = '无位置')")
+    suspend fun updateLocationIfMissing(date: String, location: String)
+
     @Query("DELETE FROM check_in_records WHERE date = :date")
     suspend fun deleteRecordByDate(date: String)
 

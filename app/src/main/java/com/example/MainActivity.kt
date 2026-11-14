@@ -870,6 +870,11 @@ fun MainScreen(
                 hasNotificationPermissionState = checkNotificationPermission(context)
                 isIgnoringBatteryOptimizationsState = checkBatteryOptimizationExemption(context)
                 model.refreshCurrentDate()
+                if (LocationHelper.checkLocationPermission(context)) {
+                    LocationHelper.refreshLocation(context) { freshLoc ->
+                        model.backfillTodayLocationIfMissing(freshLoc)
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -913,7 +918,9 @@ fun MainScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         if (results.values.any { it }) {
-            LocationHelper.refreshLocation(context)
+            LocationHelper.refreshLocation(context) { freshLoc ->
+                model.backfillTodayLocationIfMissing(freshLoc)
+            }
         }
     }
 
@@ -943,7 +950,9 @@ fun MainScreen(
                 )
             )
         } else {
-            LocationHelper.refreshLocation(context)
+            LocationHelper.refreshLocation(context) { freshLoc ->
+                model.backfillTodayLocationIfMissing(freshLoc)
+            }
         }
         val customHour = getNotificationHour(context)
         val customMinute = getNotificationMinute(context)
